@@ -6,7 +6,7 @@ Dockerizing an Angular app is quite easy.
 
 ### Files To Add
 
-In preparation, add the following four files:
+In preparation, add the following five files:
 
 - Add a `Dockerfile`
 
