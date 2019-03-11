@@ -6,13 +6,34 @@ Dockerizing an Angular app is quite easy.
 
 ### Files To Add
 
-In preparation, add the following five files:
+In preparation, add the following files:
+
+- Create an `nginx` directory and put a `default.conf` file inside:
+
+  ```nginx
+  client_max_body_size 0;
+  server_tokens off;
+  server_names_hash_bucket_size 64;
+  
+  server {
+    listen 80;
+    server_name localhost;
+
+    location / {
+      root /usr/share/nginx/html;
+      index index.html;
+  
+      try_files $uri $uri/ /index.html;
+    }
+  }
+  ```
 
 - Add a `Dockerfile`
 
   ```dockerfile
   FROM nginx
   LABEL maintainer="Michael Kaaden <github@kaaden.net>"
+  COPY nginx/default.conf /etc/nginx/conf.d
   COPY dist/dockerized-app /usr/share/nginx/html
   ```
 
@@ -47,7 +68,8 @@ In preparation, add the following five files:
   docker build -t dockerized-app .
   ```
 
-- Add a `docker-compose.yml` to be able to use `docker-compose`
+- Add a `docker-compose.yml` to pack all Docker configuration stuff
+  inside:
 
   ```yaml
   version: "3"
