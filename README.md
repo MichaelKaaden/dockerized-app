@@ -114,16 +114,19 @@ Now it's very easy to build and run the app with Docker:
    chunk {3} polyfills.407a467dedb63cfdd103.js (polyfills) 41 kB [initial] [rendered]
    chunk {4} styles.3ff695c00d717f2d2a11.css (styles) 0 bytes [initial] [rendered]
 
-   Sending build context to Docker daemon  390.1kB
-   Step 1/3 : FROM nginx
-   ---> 42b4762643dc
-   Step 2/3 : LABEL maintainer="Michael Kaaden <github@kaaden.net>"
-   ---> Using cache
-   ---> cceda606119e
-   Step 3/3 : COPY dist/dockerized-app /usr/share/nginx/html
-   ---> Using cache
-   ---> c36c5b91dd00
-   Successfully built c36c5b91dd00
+   Sending build context to Docker daemon  393.7kB
+   Step 1/4 : FROM nginx
+    ---> 42b4762643dc
+   Step 2/4 : LABEL maintainer="Michael Kaaden <github@kaaden.net>"
+    ---> Using cache
+    ---> ebd7affcf553
+   Step 3/4 : COPY nginx/default.conf /etc/nginx/conf.d
+    ---> Using cache
+    ---> 65b24d481385
+   Step 4/4 : COPY dist/dockerized-app /usr/share/nginx/html
+    ---> Using cache
+    ---> a6f5cd965884
+   Successfully built a6f5cd965884
    Successfully tagged dockerized-app:latest
    ```
 
