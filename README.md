@@ -17,6 +17,9 @@ from the outside, you don't have to change any code in your app. All you've got
 to do is to add some files and edit them to match your app's name and the target
 environment's port the app should listen to.
 
+[Here](https://github.com/MichaelKaaden/dockerized-app/releases/tag/0.0.2) you
+can find the sources that are included in this part of the document.
+
 ### Files To Add
 
 Add the following two files:
@@ -168,6 +171,9 @@ Now it's very easy to build and run the app with Docker:
    `docker-compose.yml` file)
 
 ## Part II: Build Once, Run Anywhere
+
+[Here](https://github.com/MichaelKaaden/dockerized-app) you can find the sources
+that are included in this part of the document.
 
 Think of a typical development process that requires the following environments:
 Development, testing, staging, and production. In each of these, you will
