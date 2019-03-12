@@ -1,21 +1,27 @@
 # Dockerizing an Angular app
 
-## A Little HowTo
+Dockerizing an Angular app is quite easy. I will show you how to do that in this
+document's first part.
 
-Dockerizing an Angular app isn't difficult.
+It gets a litte bit more complicated to follow Docker's "Build once, run
+anywhere" motto. The document's second part will show you a possible solution to
+this challenge.
 
-What is difficult is making the container configurable from `docker-compose`. That's what all the Settings,
-SettingsService, and SettingsInitializerService classes are about. The app needs the settings when it's launching, but
-the settings are retrieved via an HTTP call, which is asynchronous. Angular introduced the concept of an
-`APP_INITIALIZER` for that. I won't go into detail here, please look it up for yourself. It launches the app as soon as
-the initializer has resolved, i. e. the settings have been loaded from the `assets/settings.json` file.
+I won't explain any Docker concepts here. I'm sure you'll easily be able to find
+a documentation or tutorial fitting your needs.
+
+## Part I: The Simple Case
+
+To run an Angular app inside a Docker container without further configuration
+from the outside, you don't have to change any code in your app. All you've got
+to do is to add some files and edit them to match your app's name and the target
+environment's port the app should listen to.
 
 ### Files To Add
 
-In preparation, add the following files:
+Add the following two files:
 
--   Create an `nginx` directory and put the following `default.conf` file inside. As you can see, it lets the nginx
-    server listen on the internal port 80.
+-   Create an `nginx` directory and put a `default.conf` file inside:
 
     ```nginx
     client_max_body_size 0;
@@ -35,7 +41,7 @@ In preparation, add the following files:
     }
     ```
 
--   Add a `Dockerfile`
+-   Create a `Dockerfile`
 
     ```dockerfile
     FROM nginx
@@ -44,28 +50,37 @@ In preparation, add the following files:
     COPY dist/dockerized-app /usr/share/nginx/html
     ```
 
--   Add a `.dockerignore` file to prevent too many files and directories to be added to your image
+These two files are sufficient to build the Docker image containing your Angular
+app.
 
-    ```
-    .dockerignore
-    .editorconfig
-    .git
-    .gitignore
-    .idea
-    README.md
-    angular.json
-    coverage
-    e2e
-    node_modules
-    package.json
-    package-lock.json
-    src
-    tsconfig.json
-    tslint.json
-    yarn.lock
-    ```
+Too keep the image as small as possible, you should create a `.dockerignore`
+file to prevent too many files and directories to be added to your image
 
--   Add a `dockerize.sh` script to automate building the image
+```
+.dockerignore
+.editorconfig
+.git
+.gitignore
+.idea
+README.md
+angular.json
+coverage
+e2e
+node_modules
+package.json
+package-lock.json
+src
+tsconfig.json
+tslint.json
+yarn.lock
+```
+
+If you're like me, you love automating steps you need to repeat often (and which
+you will most likely forget if another project draws your attention). Because of
+this, I'm using the following two scripts:
+
+-   A `dockerize.sh` script to automate building the image (use `npm` instead of
+    `yarn`, if necessary):
 
     ```bash
     #!/bin/bash
@@ -74,15 +89,7 @@ In preparation, add the following files:
     docker build -t dockerized-app .
     ```
 
--   Add a `docker.env` file containing all the substitutions that have to be done for the container (in this example, it
-    only sets the BASE_URL for the non-existent backend service):
-
-    ```bash
-    BASE_URL=http://some.official.server:444
-    ```
-
--   Add a `docker-compose.yml` to pack all Docker configuration stuff inside. In this example, the host's port 8093 will
-    be mapped to the container's internal port 80.
+-   A `docker-compose.yml` to simplify the container instantiation:
 
     ```yaml
     version: "3"
@@ -90,16 +97,12 @@ In preparation, add the following files:
     services:
         web:
             image: dockerized-app
-            env_file:
-                - ./docker.env
             ports:
                 - "8093:80"
-            command:
-                /bin/bash -c "envsubst '$$BASE_URL' < /usr/share/nginx/html/assets/settings.json.template >
-                /usr/share/nginx/html/assets/settings.json && exec nginx -g 'daemon off;'"
     ```
 
--   Add a `redeploy.sh` script to automate (re-)starting the container
+-   A `redeploy.sh` script to automate (re-)starting the container (this uses
+    the `docker-compose.yml` file shown above):
 
     ```bash
     #! /bin/bash
@@ -112,11 +115,11 @@ In preparation, add the following files:
 
 Now it's very easy to build and run the app with Docker:
 
-1. Build the app and the image with `./dockerize.sh`
+1. Build the app and the Docker image with `./dockerize.sh`
 
     Example run:
 
-    ```
+    ```console
     $ ./dockerize.sh
     yarn install v1.13.0
     [1/4] 🔍  Resolving packages...
@@ -152,7 +155,7 @@ Now it's very easy to build and run the app with Docker:
 
     Example run:
 
-    ```
+    ```console
     $ ./redeploy.sh
     Stopping dockerized-app_web_1 ... done
     Removing dockerized-app_web_1 ... done
@@ -161,36 +164,191 @@ Now it's very easy to build and run the app with Docker:
     Creating dockerized-app_web_1 ... done
     ```
 
-3. Visit `http://localhost:8093` (that's the port defined in the `docker-compose.yml` file)
+3. Visit `http://localhost:8093` (that's the port defined in the
+   `docker-compose.yml` file)
 
-## Generic @angular/cli README.md contents
+## Part II: Build Once, Run Anywhere
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 7.3.5.
+Think of a typical development process that requires the following environments:
+Development, testing, staging, and production. In each of these, you will
+probably at least need a different base URL pointing to the location where the
+backend resides.
 
-## Development server
+In the first environment, the app needs to run wth `ng serve` and
+`ng serve --prod` from your shell. So you need some ability to inject the "base
+URL" as I'm going to call it into your app without any Docker container running.
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change
-any of the source files.
+In the other environments, Docker needs to overwrite the base URL you need for
+development with the one fitting into to the individual environment consisting
+of many containers being carefully linked together. You need to somehow inject
+the base URL here, too.
 
-## Code scaffolding
+One thing should be clear: You don't want to build a new image containing your
+Angular app for each of these environments. The tested image is the one you want
+to deploy in staging and production. Why? Because on the build system, things
+might have changed between the first and the next build. For example, a new npm
+release might have crept in. You might have updated global packages. Someone
+might have made a tiny hotfix in your code base. All of these might result in a
+slightly different build that is different from the one you had tested
+thoroughly.
 
-Run `ng generate component component-name` to generate a new component. You can also use
-`ng generate directive|pipe|service|class|guard|interface|enum|module`.
+What you need is a configurable image that works in every environment. We'll
+concentrate on the base URL. All other configurations should work the same way.
 
-## Build
+First of all, we need some mechanism to load the app configuration at runtime.
+If we'd use Angular's `environment.ts` for this purpose, the value would need to
+be set at _build time_. That's too early. So, what we need to do is put the
+configuration in some file which we'll place in the `assets` folder. This way,
+we can easily overwrite the file when composing the container. We'll see how to
+do this in a moment.
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory. Use the `--prod` flag
-for a production build.
+Here's the `src/assets/settings.json` file that we'll use:
 
-## Running unit tests
+```json
+{
+    "baseUrl": "http://localhost:5002"
+}
+```
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+Let's define a `Settings` interface that defines the config file's structure:
 
-## Running end-to-end tests
+```typescript
+export interface Settings {
+    baseUrl: string;
+}
+```
 
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
+Now we need a `SettingsService` that we simply inject whenever we need to access
+the settings.
 
-## Further help
+```typescript
+import { Injectable } from "@angular/core";
+import { Settings } from "../models/settings";
 
-To get more help on the Angular CLI use `ng help` or go check out the
-[Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+@Injectable({
+    providedIn: "root",
+})
+export class SettingsService {
+    settings: Settings;
+}
+```
+
+There's one thing we need to cope with when we're retrieving the settings from
+the JSON file: The app already needs its settings when it's launching, but the
+settings are retrieved via an HTTP call, which is done asynchronously.
+Thankfully, Angular introduced the concept of an `APP_INITIALIZER` for that. I
+won't go into detail here. The point is: The app awaits the `APP_INITIALIZER`'s
+result before continuing to initialize, and that's exactly what we need here.
+
+So, here's the `SettingsInitializerService` that is responsible for loading the
+`Settings`:
+
+```typescript
+import { HttpClient } from "@angular/common/http";
+import { Injectable } from "@angular/core";
+import { Settings } from "../models/settings";
+import { SettingsService } from "./settings.service";
+
+@Injectable({
+    providedIn: "root",
+})
+export class SettingsInitializerService {
+    constructor(private http: HttpClient, private settings: SettingsService) {}
+
+    initializeSettings(): Promise<any> {
+        return new Promise((resolve, reject) => {
+            this.http
+                .get("assets/settings.json")
+                .toPromise()
+                .then((response) => {
+                    this.settings.settings = response as Settings;
+                    resolve();
+                })
+                .catch((error) => reject(error));
+        });
+    }
+}
+```
+
+Finally, the app needs to load the settings during startup. This is done in the
+`app.module.ts` file.
+
+```typescript
+import { HttpClientModule } from "@angular/common/http";
+import { BrowserModule } from "@angular/platform-browser";
+import { APP_INITIALIZER, NgModule } from "@angular/core";
+
+import { AppRoutingModule } from "./app-routing.module";
+import { AppComponent } from "./components/app/app.component";
+import { OneComponent } from "./components/one/one.component";
+import { TwoComponent } from "./components/two/two.component";
+import { SettingsInitializerService } from "./services/settings-initializer.service";
+
+export function initSettings(
+    settingsInitializerService: SettingsInitializerService,
+) {
+    return () => settingsInitializerService.initializeSettings();
+}
+
+@NgModule({
+    declarations: [AppComponent, OneComponent, TwoComponent],
+    imports: [BrowserModule, AppRoutingModule, HttpClientModule],
+    providers: [
+        {
+            provide: APP_INITIALIZER,
+            useFactory: initSettings,
+            deps: [SettingsInitializerService],
+            multi: true,
+        },
+    ],
+    bootstrap: [AppComponent],
+})
+export class AppModule {}
+```
+
+Now, the app will load the `Settings` during startup.
+
+Well... What's still missing is the possibility to change the base URL for each
+Docker container. Currently, every container would use the value set in the
+`src/assets/settings.json` file.
+
+One option to fix this is to use the `envsubst` command. This takes a template
+file as input and substitutes all known environment variables with their value.
+
+Here's the `src/assets/settings.json.template` file:
+
+```json
+{
+    "baseUrl": "${BASE_URL}"
+}
+```
+
+Our updated `docker-compose.yml` will now use `envsubst` to produce the correct
+`src/assets/settings.json` file for each container by substituting the base URL:
+
+```yaml
+version: "3"
+
+services:
+    web:
+        image: dockerized-app
+        env_file:
+            - ./docker.env
+        ports:
+            - "8093:80"
+        command:
+            /bin/bash -c "envsubst '$$BASE_URL' <
+            /usr/share/nginx/html/assets/settings.json.template >
+            /usr/share/nginx/html/assets/settings.json && exec nginx -g 'daemon
+            off;'"
+```
+
+As you can see, I defined the environment inside the `docker.env` file. It looks
+like this:
+
+```bash
+BASE_URL=http://some.official.server:444
+```
+
+To build and run the container, you still can use the scripts shown above. But
+now the base URL will be set to the one defined in the environment.
