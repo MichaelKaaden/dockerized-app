@@ -199,8 +199,8 @@ First of all, we need some mechanism to load the app configuration at runtime.
 If we'd use Angular's `environment.ts` for this purpose, the value would need to
 be set at _build time_. That's too early. So, what we need to do is put the
 configuration in some file which we'll place in the `assets` folder. This way,
-we can easily overwrite the file when composing the container. We'll see how to
-do this in a moment.
+we can easily overwrite the file when composing the container, i. e. at
+_runtime_. We'll see how to do this in a moment.
 
 Here's the `src/assets/settings.json` file that we'll use:
 
