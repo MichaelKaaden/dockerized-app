@@ -1,13 +1,14 @@
 {
   "name": "dockerized-app",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e",
+    "prettify": "prettier --print-width 80 --write '**/*.md'"
   },
   "private": true,
   "dependencies": {
