@@ -358,3 +358,208 @@ BASE_URL=http://some.official.server:444
 
 To build and run the container, you still can use the scripts shown above. But
 now the base URL will be set to the one defined in the environment.
+
+## Part III: The Multi-Stage Build
+
+As you probably know, you need some globally installed software to build an
+Angular app. There's at least Node.js, npm (or yarn), and some web browser for
+running the unit tests.
+
+If you're developing different apps in parallel, you'd need to switch between
+different versions of the software. For app A you'd need Node.js in version
+10.15.3, for the older App B you'd need 8.11.1 instead. To build either app,
+you'd have to install the correct Node.js version before. You don't want to do
+that. Really.
+
+One solution to this problem would be to install a build server like Jenkins.
+For every project, you're able to configure an individual Node.js version. But
+you still have the problem that you'd have to install some browser globally.
+
+The alternative would be a multi-stage Docker build. With this method you're
+able to cascade two Docker build processes. The first one does the heavy lifting
+of building your app with all the dependencies like Node.js and Chrome
+installed, the second just copies the result into a new container. This is more
+or less the process you ran on your development machine, except that you no
+longer have to worry about having the right tools and their versions installed
+because they are already included in the Docker image.
+
+To try this, we need to change some things.
+
+First of all, we need to shorten our `.dockerignore` file to this one:
+
+```
+.editorconfig
+.git
+.gitignore
+.idea
+README.md
+coverage
+dist
+node_modules
+```
+
+As you can see, we're no longer stripping the sources from the Docker build.
+That's because we need to include them for the first stage to build and test the
+app. On the other hand, we no longer need the `dist` folder as we're going to
+build the app during the Docker build's first stage.
+
+The next thing we have to change is the `src/karma.conf.js` file. Please add the
+following to its `config.set({...})` section:
+
+```
+customLaunchers: {
+    ChromeHeadlessNoSandbox: {
+        base: "ChromeHeadless",
+        flags: ["--no-sandbox"],
+    },
+},
+```
+
+At least for Debian GNU/Linux, you'll need this to be able to run the unit tests
+successfully.
+
+Of course, we have to change the `Dockerfile`, too. To keep the previous one so
+we're still able to do a simple build instead of the multi-stage one, please add
+a new one named `Dockerfile.multi-stage`:
+
+```dockerfile
+FROM node:10-alpine as node
+
+RUN npm install -g @angular/cli
+
+# Installs latest Chromium package.
+RUN echo @edge http://nl.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories \
+    && echo @edge http://nl.alpinelinux.org/alpine/edge/main >> /etc/apk/repositories \
+    && apk add --no-cache \
+    chromium@edge \
+    harfbuzz@edge \
+    nss@edge \
+    && rm -rf /var/cache/*
+
+# Add Chrome as a user
+RUN mkdir -p /usr/src/app \
+    && adduser -D chrome \
+    && chown -R chrome:chrome /usr/src/app
+
+# Run Chrome as non-privileged
+USER chrome
+
+ENV CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/
+
+WORKDIR /usr/src/app
+COPY . ./
+RUN yarn
+# ChromeHeadless needs to be run with --no-sandbox
+RUN ng test --watch=false --browsers=ChromeHeadlessNoSandbox && ng build --prod
+
+# Stage 2
+FROM nginx
+
+LABEL maintainer="Michael Kaaden <github@kaaden.net>"
+
+COPY nginx/default.conf /etc/nginx/conf.d
+COPY --from=node /usr/src/app/dist/dockerized-app /usr/share/nginx/html
+```
+
+This Dockerfile uses a special image containing a pre-installed Node.js v10.
+Then, we're installing `@angular/cli` and the Chromium browser globally. After
+that, we're running the unit tests and then building the app. The second stage
+just copies the artifacts the first stage generated into a clean nginx image.
+
+Finally, please create a new `dockerize.multi-stage.sh` script and put the
+following in:
+
+```bash
+#!/bin/bash
+docker build -f Dockerfile.multi-stage -t dockerized-app .
+```
+
+Now, we no longer need to build the app with this script as the new multi-stage
+build will take care of this.
+
+To build the app and to run the resulting image, you need to call both scripts
+in sequence, just like you did before switching to the multi-stage build
+process:
+
+```console
+$ ./dockerize.multi-stage.sh
+Sending build context to Docker daemon  375.3kB
+Step 1/14 : FROM node:10-alpine as node
+ ---> 94f3c8956482
+Step 2/14 : RUN npm install -g @angular/cli
+ ---> Using cache
+ ---> fa482a783256
+Step 3/14 : RUN echo @edge http://nl.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories     && echo @edge http://nl.alpinelinux.org/alpine/edge/main >> /etc/apk/repositories     && apk add --no-cache     chromium@edge     harfbuzz@edge     nss@edge     && rm -rf /var/cache/*
+ ---> Using cache
+ ---> 5564ed996f5f
+Step 4/14 : RUN mkdir -p /usr/src/app     && adduser -D chrome     && chown -R chrome:chrome /usr/src/app
+ ---> Using cache
+ ---> 4386166be7c2
+Step 5/14 : USER chrome
+ ---> Using cache
+ ---> 7cb58fa5c1a2
+Step 6/14 : ENV CHROME_BIN=/usr/bin/chromium-browser     CHROME_PATH=/usr/lib/chromium/
+ ---> Using cache
+ ---> d6ebad5eb164
+Step 7/14 : WORKDIR /usr/src/app
+ ---> Using cache
+ ---> 13013d263739
+Step 8/14 : COPY . ./
+ ---> dc4a22077f73
+Step 9/14 : RUN yarn
+ ---> Running in 6437e5fa60d9
+yarn install v1.13.0
+[1/4] Resolving packages...
+[2/4] Fetching packages...
+info fsevents@1.2.7: The platform "linux" is incompatible with this module.
+info "fsevents@1.2.7" is an optional dependency and failed compatibility check. Excluding it from installation.
+[3/4] Linking dependencies...
+[4/4] Building fresh packages...
+Done in 42.82s.
+Removing intermediate container 6437e5fa60d9
+ ---> 90e56dd32b15
+Step 10/14 : RUN ng test --watch=false --browsers=ChromeHeadlessNoSandbox && ng build --prod
+ ---> Running in d1ddaffc16cb
+13 03 2019 21:00:50.648:INFO [karma-server]: Karma v4.0.1 server started at http://0.0.0.0:9876/
+13 03 2019 21:00:50.650:INFO [launcher]: Launching browsers ChromeHeadlessNoSandbox with concurrency unlimited
+13 03 2019 21:00:50.669:INFO [launcher]: Starting browser ChromeHeadless
+13 03 2019 21:00:53.547:INFO [HeadlessChrome 72.0.3626 (Linux 0.0.0)]: Connected on socket 3N6EMwCRhxGyDnspAAAA with id 6433480
+HeadlessChrome 72.0.3626 (Linux 0.0.0): Executed 7 of 7 SUCCESS (0.236 secs / 0.224 secs)
+TOTAL: 7 SUCCESS
+TOTAL: 7 SUCCESS
+
+Date: 2019-03-13T21:01:17.137Z
+Hash: b37badaa2a2a81628c08
+Time: 18579ms
+chunk {0} runtime.a5dd35324ddfd942bef1.js (runtime) 1.41 kB [entry] [rendered]
+chunk {1} es2015-polyfills.4a4cfea0ce682043f4e9.js (es2015-polyfills) 56.4 kB [initial] [rendered]
+chunk {2} main.93dfc87f5d440cbc16ac.js (main) 262 kB [initial] [rendered]
+chunk {3} polyfills.9f3702a215d30daac9b6.js (polyfills) 41 kB [initial] [rendered]
+chunk {4} styles.3ff695c00d717f2d2a11.css (styles) 0 bytes [initial] [rendered]
+Removing intermediate container d1ddaffc16cb
+ ---> 2827acaf8241
+Step 11/14 : FROM nginx
+ ---> 42b4762643dc
+Step 12/14 : LABEL maintainer="Michael Kaaden <github@kaaden.net>"
+ ---> Using cache
+ ---> e90650758b69
+Step 13/14 : COPY nginx/default.conf /etc/nginx/conf.d
+ ---> Using cache
+ ---> 036bfc0c7c36
+Step 14/14 : COPY --from=node /usr/src/app/dist/dockerized-app /usr/share/nginx/html
+ ---> 990a8e08cc46
+Successfully built 990a8e08cc46
+Successfully tagged dockerized-app:latest
+```
+
+```console
+$ ./redeploy.sh
+Removing network dockerized-app_default
+WARNING: Network dockerized-app_default not found.
+Creating network "dockerized-app_default" with the default driver
+Creating dockerized-app_web_1 ... done
+```
+
+The only thing left is to decide whether you want to use the simple or the
+multi-stage build.
