@@ -172,8 +172,8 @@ Now it's very easy to build and run the app with Docker:
 
 ## Part II: Build Once, Run Anywhere
 
-[Here](https://github.com/MichaelKaaden/dockerized-app) you can find the sources
-that are included in this part of the document.
+[Here](https://github.com/MichaelKaaden/dockerized-app/releases/tag/1.0.1) you
+can find the sources that are included in this part of the document.
 
 Think of a typical development process that requires the following environments:
 Development, testing, staging, and production. In each of these, you will
@@ -360,6 +360,9 @@ To build and run the container, you still can use the scripts shown above. But
 now the base URL will be set to the one defined in the environment.
 
 ## Part III: The Multi-Stage Build
+
+[Here](https://github.com/MichaelKaaden/dockerized-app) you can find the sources
+that are included in this part of the document.
 
 As you probably know, you need some globally installed software to build an
 Angular app. There's at least Node.js, npm (or yarn), and some web browser for
