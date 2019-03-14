@@ -1,0 +1,7 @@
+version: "3"
+
+services:
+    web:
+        image: dockerized-app-simple
+        ports:
+            - "8093:80"
