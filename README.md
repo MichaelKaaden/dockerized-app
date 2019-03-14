@@ -580,5 +580,20 @@ Creating network "dockerized-app_default" with the default driver
 Creating dockerized-app_web_1 ... done
 ```
 
-The only thing left is to decide whether you want to use the simple or the
-multi-stage build.
+## Comparison
+
+Regarding their size, there's absolutely no difference between the ways we built the images.
+
+| REPOSITORY                 | TAG     | IMAGE ID      | CREATED              | SIZE  |
+|----------------------------|---------|---------------|----------------------|-------|
+| dockerized-app-simple      | latest  | a90b35651f39  | 18 minutes ago       | 110MB |
+| dockerized-app-env         | latest  | 709da311ce4b  | 17 minutes ago       | 110MB |
+| dockerized-app-multistage  | latest  | 3ecfc4231dd5  | About a minute ago   | 110MB |
+
+If you don't need to change the configuration, stick to the simple way described in part I to build your app.
+For an app running in different environments, you have to choose either the second or third
+way. Furthermore, you need to decide on how often your tools need to change. If you've got
+everything under control, you may stick to the second way described in part II. Else, I suggest
+to use the multi-stage build I've shown you in part III.
+
+Whichever way you choose, you'll soon see how easy it is to deploy your app using Docker.
