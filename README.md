@@ -1,63 +1,78 @@
-# Dockerizing an Angular app
+# How To Dockerize an Angular Application
 
-Dockerizing an Angular app is quite easy. I will show you how to do that in this
-document's first part.
+_I won't explain any Docker concepts here. I'm sure you'll find a tutorial that
+suits you._
+
+Dockerizing an Angular app is quite easy. I' wi'll show you how to do that in
+this document's first part.
 
 It gets a litte bit more complicated to follow Docker's "Build once, run
-anywhere" motto. The document's second part will show you a possible solution to
+anywhere" motto. The document's second part will present a possible solution to
 this challenge.
 
-I won't explain any Docker concepts here. I'm sure you'll easily be able to find
-a documentation or tutorial fitting your needs.
+A small extension to this is enough to move the complete build process to a
+container. I'll show you a motivation and how to do this in the third part.
+
+For demonstration purposes I created a very basic app that consists of two
+components. The first displays a 1, the other shows a 2. I'm using the Angular
+router to show either one. The purpose is to proof that routing works, even when
+reloading the app. This is a real matter because we're going to use
+[nginx](http://nginx.org/) to serve the app, and for reloading to work, we need
+a rewriting rule in nginx' configuration.
+
+The app will stay the same for all parts of this document, but only from the
+user's perspective. For part II, the app will change slightly to allow to be
+configured by Docker.
+
+For every part in this document, there is a directory in this source tree. Every
+directory contains the whole application so you can easily diff what changed
+between the parts explained in this document.
+
+Without further ado, let's start with the simple case.
 
 ## Part I: The Simple Case
 
-To run an Angular app inside a Docker container without further configuration
-from the outside, you don't have to change any code in your app. All you've got
-to do is to add some files and edit them to match your app's name and the target
-environment's port the app should listen to.
+To run an Angular app inside a Docker container, you don't have to change any
+code in your app. All you've got to do is to add some files and edit them to
+match your app's name and the target environment's port the app should listen
+to.
 
-[Here](https://github.com/MichaelKaaden/dockerized-app/releases/tag/0.0.2) you
-can find the sources that are included in this part of the document.
+Let's create an `nginx` directory and put a `default.conf` file inside:
 
-### Files To Add
+```nginx
+client_max_body_size 0;
+server_tokens off;
+server_names_hash_bucket_size 64;
 
-Add the following two files:
+server {
+  listen 80;
+  server_name localhost;
 
--   Create an `nginx` directory and put a `default.conf` file inside:
+  location / {
+    root /usr/share/nginx/html;
+    index index.html;
 
-    ```nginx
-    client_max_body_size 0;
-    server_tokens off;
-    server_names_hash_bucket_size 64;
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
 
-    server {
-      listen 80;
-      server_name localhost;
+Create a `Dockerfile`. You'll need to change the `dockerized-app` to your app's
+name as well as the `maintainer` line.
 
-      location / {
-        root /usr/share/nginx/html;
-        index index.html;
+```dockerfile
+FROM nginx
+LABEL maintainer="Michael Kaaden <github@kaaden.net>"
+COPY nginx/default.conf /etc/nginx/conf.d
+COPY dist/dockerized-app /usr/share/nginx/html
+```
 
-        try_files $uri $uri/ /index.html;
-      }
-    }
-    ```
-
--   Create a `Dockerfile`
-
-    ```dockerfile
-    FROM nginx
-    LABEL maintainer="Michael Kaaden <github@kaaden.net>"
-    COPY nginx/default.conf /etc/nginx/conf.d
-    COPY dist/dockerized-app /usr/share/nginx/html
-    ```
-
-These two files are sufficient to build the Docker image containing your Angular
-app.
+These two files are already sufficient to build the Docker image containing your
+Angular app.
 
 Too keep the image as small as possible, you should create a `.dockerignore`
-file to prevent too many files and directories to be added to your image
+file to prevent too many files and directories to be transferred to the Docker
+daemon.
 
 ```
 .dockerignore
@@ -78,45 +93,44 @@ tslint.json
 yarn.lock
 ```
 
-If you're like me, you love automating steps you need to repeat often (and which
-you will most likely forget if another project draws your attention). Because of
-this, I'm using the following two scripts:
+If you're like me, you love automating steps you need to repeat over and over
+again (and which you will most likely forget if another project draws your
+attention).
 
--   A `dockerize.sh` script to automate building the image (use `npm` instead of
-    `yarn`, if necessary):
+Here's a `dockerize.sh` script to automate building the image (use `npm` instead
+of `yarn`, if necessary):
 
-    ```bash
-    #!/bin/bash
-    yarn --prefer-offline --no-progress
-    ng build --prod
-    docker build -t dockerized-app .
-    ```
+```bash
+#!/bin/bash
+yarn --prefer-offline --no-progress
+ng build --prod
+docker build -t dockerized-app .
+```
 
--   A `docker-compose.yml` to simplify the container instantiation:
+In preparation for the next script, create a `docker-compose.yml` to simplify
+the container instantiation:
 
-    ```yaml
-    version: "3"
+```yaml
+version: "3"
 
-    services:
-        web:
-            image: dockerized-app
-            ports:
-                - "8093:80"
-    ```
+services:
+    web:
+        image: dockerized-app
+        ports:
+            - "8093:80"
+```
 
--   A `redeploy.sh` script to automate (re-)starting the container (this uses
-    the `docker-compose.yml` file shown above):
+Finally, add a `redeploy.sh` script to automate (re-)starting the container
+(this uses the `docker-compose.yml` file shown above):
 
-    ```bash
-    #! /bin/bash
-    export COMPOSE_HTTP_TIMEOUT=300
-    docker-compose down --remove-orphans
-    docker-compose up -d
-    ```
+```bash
+#! /bin/bash
+export COMPOSE_HTTP_TIMEOUT=300
+docker-compose down --remove-orphans
+docker-compose up -d
+```
 
-### Building And Running The Dockerized App
-
-Now it's very easy to build and run the app with Docker:
+With this in place, it's very simple to build and run the app with Docker:
 
 1. Build the app and the Docker image with `./dockerize.sh`
 
@@ -168,47 +182,45 @@ Now it's very easy to build and run the app with Docker:
     ```
 
 3. Visit `http://localhost:8093` (that's the port defined in the
-   `docker-compose.yml` file)
+   `docker-compose.yml` file above)
 
 ## Part II: Build Once, Run Anywhere
-
-[Here](https://github.com/MichaelKaaden/dockerized-app/releases/tag/1.0.1) you
-can find the sources that are included in this part of the document.
 
 Think of a typical development process that requires the following environments:
 Development, testing, staging, and production. In each of these, you will
 probably at least need a different base URL pointing to the location where the
-backend resides.
+backend resides. That's why I take this as an example of a configuration option
+to change for each of these environments.
 
 In the first environment, the app needs to run wth `ng serve` and
-`ng serve --prod` from your shell. So you need some ability to inject the "base
-URL" as I'm going to call it into your app without any Docker container running.
+`ng serve --prod` from your shell. So you need some ability to inject the base
+URL into your app without any Docker container running.
 
 In the other environments, Docker needs to overwrite the base URL you need for
 development with the one fitting into to the individual environment consisting
-of many containers being carefully linked together. You need to somehow inject
+of many containers being carefully linked together. You somehow need to inject
 the base URL here, too.
 
 One thing should be clear: You don't want to build a new image containing your
-Angular app for each of these environments. The tested image is the one you want
-to deploy in staging and production. Why? Because on the build system, things
-might have changed between the first and the next build. For example, a new npm
-release might have crept in. You might have updated global packages. Someone
-might have made a tiny hotfix in your code base. All of these might result in a
-slightly different build that is different from the one you had tested
-thoroughly.
-
-What you need is a configurable image that works in every environment. We'll
-concentrate on the base URL. All other configurations should work the same way.
+Angular app for each of these environments just because you have to set a
+different base URL for each one. The tested image is the one and only you want
+to deploy in both staging and production. Why? Because even on a managed build
+system, things might have changed between the first (tested) and the next build.
+For example, a new npm release might have crept in. You might have updated
+global packages. Someone might have made a tiny hotfix in your code base. All of
+these might result in a image that is slightly different from the one you had
+tested thoroughly and, therefore, might be faulty. What you need is a image that
+you can easily configure to work in each environment.
 
 First of all, we need some mechanism to load the app configuration at runtime.
 If we'd use Angular's `environment.ts` for this purpose, the value would need to
-be set at _build time_. That's too early. So, what we need to do is put the
-configuration in some file which we'll place in the `assets` folder. This way,
-we can easily overwrite the file when composing the container, i. e. at
-_runtime_. We'll see how to do this in a moment.
+be set at _build time_. That's too early. So, what we need to do is to stow away
+the configuration in some file which we'll place in the `assets` folder. This
+way, we can easily overwrite the file when building the container from the
+image, i. e. at _runtime_. We'll see how to do this in a moment.
 
-Here's the `src/assets/settings.json` file that we'll use:
+Here's the `src/assets/settings.json` file that we'll use (since we haven't got
+a backend in this example code, the value doesn't matter):
 
 ```json
 {
@@ -216,7 +228,7 @@ Here's the `src/assets/settings.json` file that we'll use:
 }
 ```
 
-Let's define a `Settings` interface that defines the config file's structure:
+Let's define a `Settings` interface that resembles the config file's structure:
 
 ```typescript
 export interface Settings {
@@ -224,8 +236,8 @@ export interface Settings {
 }
 ```
 
-Now we need a `SettingsService` that we simply inject whenever we need to access
-the settings.
+Now we need a `SettingsService` that we inject whenever we need to access the
+settings.
 
 ```typescript
 import { Injectable } from "@angular/core";
@@ -240,14 +252,15 @@ export class SettingsService {
 ```
 
 There's one thing we need to cope with when we're retrieving the settings from
-the JSON file: The app already needs its settings when it's launching, but the
-settings are retrieved via an HTTP call, which is done asynchronously.
-Thankfully, Angular introduced the concept of an `APP_INITIALIZER` for that. I
-won't go into detail here. The point is: The app awaits the `APP_INITIALIZER`'s
-result before continuing to initialize, and that's exactly what we need here.
+the JSON file: The app already needs its settings when it's launching. The
+settings are retrieved via an HTTP call, which means it happens asynchronously.
+Thankfully, Angular introduced the concept of an `APP_INITIALIZER` for things
+like that. I won't go into detail here. The point is: The app waits for the
+`APP_INITIALIZER`'s result before continuing to start up, and that's exactly
+what we need here.
 
 So, here's the `SettingsInitializerService` that is responsible for loading the
-`Settings`:
+`src/assets/settings.json`:
 
 ```typescript
 import { HttpClient } from "@angular/common/http";
@@ -276,8 +289,8 @@ export class SettingsInitializerService {
 }
 ```
 
-Finally, the app needs to load the settings during startup. This is done in the
-`app.module.ts` file.
+Finally, as I told you above, the app needs to load the settings during startup.
+This is done in the `app.module.ts` file.
 
 ```typescript
 import { HttpClientModule } from "@angular/common/http";
@@ -312,14 +325,13 @@ export function initSettings(
 export class AppModule {}
 ```
 
-Now, the app will load the `Settings` during startup.
+With this, the development environment is fully functional. Just put the
+development's base URL in the `src/assets/settings.json` file.
 
-Well... What's still missing is the possibility to change the base URL for each
-Docker container. Currently, every container would use the value set in the
-`src/assets/settings.json` file.
-
-One option to fix this is to use the `envsubst` command. This takes a template
-file as input and substitutes all known environment variables with their value.
+Well... What's still missing is the explanation how to change the base URL for
+each Docker container. The option I like to use to fix this uses the `envsubst`
+command. This takes a template file as input and substitutes all known
+environment variables with their value.
 
 Here's the `src/assets/settings.json.template` file:
 
@@ -330,7 +342,8 @@ Here's the `src/assets/settings.json.template` file:
 ```
 
 Our updated `docker-compose.yml` will now use `envsubst` to produce the correct
-`src/assets/settings.json` file for each container by substituting the base URL:
+`src/assets/settings.json` file from this template for each container by
+substituting the base URL:
 
 ```yaml
 version: "3"
@@ -356,37 +369,42 @@ like this:
 BASE_URL=http://some.official.server:444
 ```
 
-To build and run the container, you still can use the scripts shown above. But
-now the base URL will be set to the one defined in the environment.
+With this, we have all the building blocks together to build and run the
+container. The scripts shown above still work. But now the base URL from the
+`docker.env` file will be set used instead of the one you defined for the
+development environment.
 
 ## Part III: The Multi-Stage Build
 
-[Here](https://github.com/MichaelKaaden/dockerized-app) you can find the sources
-that are included in this part of the document.
-
-As you probably know, you need some globally installed software to build an
-Angular app. There's at least Node.js, npm (or yarn), and some web browser for
-running the unit tests.
+As you probably know, you need some globally installed tools to build an Angular
+app. There's at least Node.js, npm (or yarn), @angular/cli and some web browser
+for running the unit tests before building the app.
 
 If you're developing different apps in parallel, you'd need to switch between
-different versions of the software. For app A you'd need Node.js in version
-10.15.3, for the older App B you'd need 8.11.1 instead. To build either app,
-you'd have to install the correct Node.js version before. You don't want to do
-that. Really.
+different versions of the tools. For example, for app A you'd need Node.js in
+version 10.15.3, for the older app B you'd need 8.11.1 instead. To build either
+app, you'd have to remember to switch to the correct Node.js version before. You
+don't want to do that, even with scripts using [n](https://github.com/tj/n) or
+[nvm](https://github.com/creationix/nvm) to do that switch during the build.
+Really. Just imagine you'd kick off two builds at the same time...
 
 One solution to this problem would be to install a build server like Jenkins.
-For every project, you're able to configure an individual Node.js version. But
-you still have the problem that you'd have to install some browser globally.
+For every project, you're able to configure an individual Node.js version.
+Unfortunately, that only solves half the problem. You'd still have the problem
+that you'd have to install some browser globally which perhaps you can't or
+don't want.
 
-The alternative would be a multi-stage Docker build. With this method you're
-able to cascade two Docker build processes. The first one does the heavy lifting
-of building your app with all the dependencies like Node.js and Chrome
-installed, the second just copies the result into a new container. This is more
-or less the process you ran on your development machine, except that you no
-longer have to worry about having the right tools and their versions installed
-because they are already included in the Docker image.
+The alternative is a multi-stage Docker build process. With this, you're
+essentially able to cascade two Docker build processes. The first one does the
+heavy lifting of building your app with all the dependencies like Node.js and
+Chrome installed, the second just copies the result into a new container. Best
+thing is that those dependencies are under the developer's control and are part
+of the version control -- which the Jenkins configuration isn't. This resembles
+the process you run on your development machine, except that you no longer have
+to worry about having the right tools and their versions installed because they
+are already included in the Docker image.
 
-To try this, we need to change some things.
+To try this, we need to change some of the files we prepared in part II.
 
 First of all, we need to shorten our `.dockerignore` file to this one:
 
@@ -401,10 +419,10 @@ dist
 node_modules
 ```
 
-As you can see, we're no longer stripping the sources from the Docker build.
-That's because we need to include them for the first stage to build and test the
-app. On the other hand, we no longer need the `dist` folder as we're going to
-build the app during the Docker build's first stage.
+As you can see, we're no longer hiding the files needed for building the app
+from the Docker daemon because the first stage will now take care of the build.
+On the other hand, we no longer need the `dist` folder for exactly the same
+reason.
 
 The next thing we have to change is the `src/karma.conf.js` file. Please add the
 following to its `config.set({...})` section:
@@ -418,12 +436,10 @@ customLaunchers: {
 },
 ```
 
-At least for Debian GNU/Linux, you'll need this to be able to run the unit tests
-successfully.
+At least for Debian GNU/Linux where I do my builds, you'll need this to be able
+to run the unit tests successfully.
 
-Of course, we have to change the `Dockerfile`, too. To keep the previous one so
-we're still able to do a simple build instead of the multi-stage one, please add
-a new one named `Dockerfile.multi-stage`:
+Of course, we have to update the `Dockerfile`, too:
 
 ```dockerfile
 FROM node:10-alpine as node
@@ -470,12 +486,12 @@ Then, we're installing `@angular/cli` and the Chromium browser globally. After
 that, we're running the unit tests and then building the app. The second stage
 just copies the artifacts the first stage generated into a clean nginx image.
 
-Finally, please create a new `dockerize.multi-stage.sh` script and put the
-following in:
+Finally, please update the `dockerize.sh` script to the
+following:
 
 ```bash
 #!/bin/bash
-docker build -f Dockerfile.multi-stage -t dockerized-app .
+docker build -t dockerized-app .
 ```
 
 Now, we no longer need to build the app with this script as the new multi-stage
@@ -486,7 +502,7 @@ in sequence, just like you did before switching to the multi-stage build
 process:
 
 ```console
-$ ./dockerize.multi-stage.sh
+$ ./dockerize.sh
 Sending build context to Docker daemon  375.3kB
 Step 1/14 : FROM node:10-alpine as node
  ---> 94f3c8956482
