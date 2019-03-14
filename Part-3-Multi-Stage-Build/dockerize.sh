@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t dockerized-app .
+docker build -t dockerized-app-multistage .
