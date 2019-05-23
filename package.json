@@ -1,6 +1,6 @@
 {
   "name": "dockerized-app",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "scripts": {
     "prettify": "prettier --print-width 80 --write '**/*.md'"
   },
