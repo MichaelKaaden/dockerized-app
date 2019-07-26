@@ -11,14 +11,13 @@ export class SettingsInitializerService {
 
     initializeSettings(): Promise<any> {
         return new Promise((resolve, reject) => {
-            this.http
-                .get("assets/settings.json")
-                .toPromise()
-                .then((response) => {
+            this.http.get("assets/settings.json").subscribe(
+                (response) => {
                     this.settings.settings = response as Settings;
                     resolve();
-                })
-                .catch((error) => reject(error));
+                },
+                (error) => reject(error),
+            );
         });
     }
 }
