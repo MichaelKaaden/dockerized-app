@@ -1,30 +1,16 @@
-FROM node:10-alpine as node
+FROM node:10-buster as node
 
-RUN npm install -g @angular/cli
+RUN npm install -g @angular/cli@7.3.5
 
-# Installs latest Chromium package.
-RUN echo @edge http://nl.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories \
-    && echo @edge http://nl.alpinelinux.org/alpine/edge/main >> /etc/apk/repositories \
-    && apk add --no-cache \
-    chromium@edge \
-    harfbuzz@edge \
-    nss@edge \
-    && rm -rf /var/cache/*
+# install Google Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update && apt-get install -yq google-chrome-stable
 
-# Add Chrome as a user
-RUN mkdir -p /usr/src/app \
-    && adduser -D chrome \
-    && chown -R chrome:chrome /usr/src/app
-
-# Run Chrome as non-privileged
-USER chrome
-
-ENV CHROME_BIN=/usr/bin/chromium-browser \
-    CHROME_PATH=/usr/lib/chromium/
-
+# now test and build the app
 WORKDIR /usr/src/app
 COPY . ./
-RUN yarn
+RUN yarn install
 # ChromeHeadless needs to be run with --no-sandbox
 RUN ng test --watch=false --browsers=ChromeHeadlessNoSandbox && ng build --prod
 
