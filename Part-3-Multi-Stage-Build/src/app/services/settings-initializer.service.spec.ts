@@ -32,7 +32,7 @@ describe("SettingsInitializerService", () => {
         expect(service).toBeTruthy();
     });
 
-    it("should initialize settings new", (done) => {
+    it("should initialize settings", (done) => {
         service.initializeSettings().then(() => {
             expect(settingsService.settings).toEqual(testSettings);
             done();
